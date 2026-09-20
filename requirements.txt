@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-multipart
+networkx
+shapely
+opencv-python-headless
+# Perception (add as you implement app/cv/pipeline.py)
+# ultralytics        # YOLOv10-seg
+# paddleocr
+# paddlepaddle
+
+# Local LLM (add as you implement app/voice/translator.py)
+# llama-cpp-python   # or use an Ollama HTTP client instead, no extra dep needed
