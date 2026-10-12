@@ -11,3 +11,4 @@ opencv-python-headless
 
 # Local LLM (add as you implement app/voice/translator.py)
 # llama-cpp-python   # or use an Ollama HTTP client instead, no extra dep needed
+ezdxf
