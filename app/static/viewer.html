@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spatial Copilot — 3D Viewer</title>
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #111; color: #eee; }
+    h1 { font-size: 1.2rem; }
+    #drop-zone {
+      border: 2px dashed #555; border-radius: 8px; padding: 2rem;
+      text-align: center; margin-bottom: 1rem; cursor: pointer;
+    }
+    #drop-zone.hover { border-color: #4af; background: #1a1a1a; }
+    model-viewer { width: 100%; height: 70vh; background: #1a1a1a; border-radius: 8px; }
+    #status { color: #4af; margin-bottom: 1rem; min-height: 1.2em; }
+    #info { color: #888; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>Spatial Copilot — CAD / PDF → 3D</h1>
+  <div id="drop-zone">Drop a .dxf or vector .pdf here, or click to choose a file</div>
+  <input type="file" id="file-input" accept=".dxf,.pdf" style="display:none" />
+  <div id="status"></div>
+  <model-viewer id="viewer" camera-controls auto-rotate shadow-intensity="1" style="display:none"></model-viewer>
+  <div id="info"></div>
+
+  <script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const status = document.getElementById('status');
+    const viewer = document.getElementById('viewer');
+    const info = document.getElementById('info');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('hover');
+      if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) uploadFile(fileInput.files[0]);
+    });
+
+    async function uploadFile(file) {
+      status.textContent = `Converting ${file.name}...`;
+      info.textContent = '';
+      viewer.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/mesh/to-glb', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok) {
+          status.textContent = `Error: ${data.detail}`;
+          return;
+        }
+
+        status.textContent = `Loaded ${file.name}`;
+        info.textContent = `${data.wall_count} walls, ${data.room_count} rooms, source: ${data.source_format}`;
+        viewer.src = data.model_url;
+        viewer.style.display = 'block';
+      } catch (err) {
+        status.textContent = `Request failed: ${err.message}`;
+      }
+    }
+  </script>
+</body>
+</html>

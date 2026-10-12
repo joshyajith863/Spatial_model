@@ -13,6 +13,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter()
+# Imported lazily inside handle_query to avoid a circular import
+# (app.voice.rule_based_translator imports StructuredQuery from this module).
 
 
 class QueryRequest(BaseModel):
@@ -35,12 +37,33 @@ class QueryResponse(BaseModel):
 
 @router.post("/", response_model=QueryResponse)
 def handle_query(req: QueryRequest):
-    # TODO: app.voice.translator.parse(req.text) -> StructuredQuery
-    # TODO: app.skg.engine.execute(req.blueprint_id, structured_query) -> dict
-    structured_query = StructuredQuery(intent="unknown")
-    result = {"error": "Pipeline not yet wired up."}
+    # Local imports to avoid a circular import at module load time
+    # (rule_based_translator imports StructuredQuery from this file).
+    from app.voice.rule_based_translator import parse as translate
+    from app.skg import store as skg_store
+    from app.skg.engine import execute as execute_query
+
+    structured_query = translate(req.text)
 
     if structured_query.intent == "unknown":
-        raise HTTPException(status_code=501, detail="Query translation not implemented yet.")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Couldn't understand '{req.text}'. Try phrasing like "
+                   f"'path from kitchen to hallway', 'area of kitchen', "
+                   f"or 'egress from bedroom'.",
+        )
+
+    skg = skg_store.get(req.blueprint_id)
+    if skg is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No graph found for blueprint_id '{req.blueprint_id}'. "
+                   f"Upload a DXF/vector-PDF via /api/mesh/to-glb first.",
+        )
+
+    try:
+        result = execute_query(skg, structured_query)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     return QueryResponse(structured_query=structured_query, result=result)

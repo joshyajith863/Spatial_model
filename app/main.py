@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import blueprints, query
+from app.api import blueprints, query, mesh
 
 app = FastAPI(
     title="Spatial Copilot",
@@ -30,6 +30,7 @@ app.add_middleware(
 
 app.include_router(blueprints.router, prefix="/api/blueprints", tags=["blueprints"])
 app.include_router(query.router, prefix="/api/query", tags=["query"])
+app.include_router(mesh.router, prefix="/api/mesh", tags=["mesh"])
 
 # Serves generated GLB files / HUD assets to the WebXR frontend.
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
