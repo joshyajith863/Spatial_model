@@ -1,5 +1,5 @@
 """
-Blueprint ingestion endpoints (raster image path, via the CV pipeline).
+Blueprint ingestion endpoints.
 
 Flow:
     POST /api/blueprints/upload   -> save file, run perception pipeline, return draft graph

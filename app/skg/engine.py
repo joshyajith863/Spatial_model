@@ -49,25 +49,8 @@ class SpatialKnowledgeGraph:
         return {"path": best, "hops": len(best) - 1}
 
 
-def execute(skg: "SpatialKnowledgeGraph", structured_query) -> dict:
-    """Dispatches a StructuredQuery to the right SKG method. The caller
-    (app/api/query.py) is responsible for looking up the graph by
-    blueprint_id via app/skg/store.py before calling this."""
-    intent = structured_query.intent
-
-    if intent == "find_path":
-        path = skg.find_path(structured_query.room_from, structured_query.room_to)
-        return {"path": path}
-
-    if intent == "compute_area":
-        area = skg.compute_area(structured_query.room)
-        return {"room": structured_query.room, "area_sq_m": area}
-
-    if intent == "check_egress":
-        # Exit rooms aren't tagged yet (no explicit "this room is an exit"
-        # data from any parser) — until that exists, treat every room with
-        # only one connection (a leaf node) as a provisional exit candidate.
-        exit_rooms = [n for n in skg.graph.nodes if skg.graph.degree[n] <= 1]
-        return skg.check_egress(structured_query.room, exit_rooms)
-
-    raise ValueError(f"Unhandled intent: {intent}")
+def execute(blueprint_id: str, structured_query) -> dict:
+    """Called from app.api.query. Looks up the confirmed graph for
+    blueprint_id and dispatches to the right SKG method based on
+    structured_query.intent."""
+    raise NotImplementedError("Graph store/lookup not yet wired up.")

@@ -3,18 +3,11 @@ uvicorn[standard]
 python-multipart
 networkx
 shapely
-
-# CAD/PDF -> 3D GLB pipeline
-ezdxf
-pymupdf
-trimesh
-manifold3d
-numpy
-
-# Perception for raster images (add when implementing app/cv/pipeline.py)
-# ultralytics        # YOLOv8-seg
+opencv-python-headless
+# Perception (add as you implement app/cv/pipeline.py)
+# ultralytics        # YOLOv10-seg
 # paddleocr
 # paddlepaddle
 
-# Local LLM (add when implementing app/voice/translator.py)
+# Local LLM (add as you implement app/voice/translator.py)
 # llama-cpp-python   # or use an Ollama HTTP client instead, no extra dep needed
