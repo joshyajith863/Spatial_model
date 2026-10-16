@@ -21,6 +21,7 @@ That's the whole architectural claim (deterministic reasoning over AI-assisted p
 **Out of scope (defer to phase 2)**
 - WebXR / 3D pipeline
 - SDG advisory engine
+- **Sustainability advisory model** — reads the confirmed plan and proposes concrete changes to make it greener (see *Phase 2 model* below)
 - Real voice/speech input
 - Multi-style blueprint generalization
 - Automatic scale-bar detection (use manual calibration fallback instead)
@@ -84,7 +85,68 @@ One blueprint, uploaded through the browser, produces a graph a human confirms, 
 
 - WebXR 3D pipeline
 - SDG Advisory Engine (egress, WWR, daylight, HVAC, ventilation)
+- **Sustainability advisory model** (spec below)
 - Real speech-to-text voice input
 - Automatic scale-bar/dimension-line detection
 - Multi-style blueprint generalization
 - Draggable-polygon human verification editor
+
+---
+
+## Phase 2 model — Sustainability Advisor
+
+**Goal:** given a *confirmed* floorplan, tell the user how to improve it and make it more
+environmentally sustainable. Output is concrete, ranked, actionable suggestions — not just
+a score. This is the "SDG advisory" idea turned into an explicit model.
+
+**Why it fits this architecture.** The whole point of Spatial Copilot is that the LLM never
+does geometry — it only selects a query template and fills slots. This model follows the
+same rule: it *reads* deterministic metrics computed by the SKG and turns them into
+plain-language advice. The environmental math stays hallucination-free; the LLM only
+explains and prioritizes.
+
+### Inputs (all computed deterministically by `app/skg`, never guessed)
+
+| Metric | Source | Sustainability angle |
+|---|---|---|
+| Window-to-wall ratio (WWR), per orientation | window + wall polygons | SDG 7/13 — daylight vs. heat loss/gain |
+| Gross floor area, room areas | `compute_area()` | embodied + operational energy |
+| Shape factor (surface-area-to-volume) | exterior wall polygon | thermal efficiency of the envelope |
+| Egress path length, bottlenecks | `check_egress()` | SDG 11 — safety + accessibility |
+| Daylight autonomy proxy (glazing per room) | window polygons ÷ room area | SDG 3/7 — lighting energy, wellbeing |
+| Circulation-to-usable-area ratio | room adjacency graph | SDG 11 — wasted, conditioned space |
+
+### Model role (two options, decide on measured quality)
+
+1. **Small local LLM via Ollama** (same stack as the query translator) — prompt it with the
+   computed metrics and a fixed catalogue of improvement levers; have it select + rank +
+   justify. No free-form geometry, only reasoning over numbers we supply.
+2. **Rule-based first** — a deterministic mapping (e.g. `WWR < 0.15` on a south face →
+   "increase glazing for passive solar gain") with templated phrasing. Cheaper, testable,
+   zero-hallucination, and a solid fallback if the LLM adds friction — mirroring the query
+   translator's own regex fallback strategy.
+
+**Recommendation:** ship rule-based first (it's just lookups over SKG metrics), then layer
+the LLM on top for phrasing and cross-metric trade-off reasoning.
+
+### Suggested improvement levers to encode
+
+- **Envelope** — raise WWR on useful orientations; flag over-glazing on poor ones (heat loss).
+- **Orientation / passive solar** — south-facing glazing for free heat; shading on hot faces.
+- **Daylight** — deepen daylight into floor plate; flag deep rooms lit only artificially.
+- **Compactness** — high shape factor → more envelope heat exchange per usable m².
+- **Circulation** — long corridors and dead space are conditioned but unusable.
+- **Egress / accessibility** — SDG 11: multiple exits, short travel distances.
+- **Material/embodied-carbon hook** — stub for phase 2+; surface area feeds an embodied-CO₂
+  estimate once we have a per-material factor.
+
+### Definition of done for this model
+
+One confirmed plan in → a ranked list of suggestions out, each tagged with the metric that
+triggered it and the SDG it serves (7, 11, 13, 3), rendered on the 2D HUD.
+
+### Out of scope for this model
+
+- No HVAC duct routing or pressure-drop simulation (needs engineering data we don't have).
+- No generative redesign / auto-move-walls — advisory only, the human edits.
+- No energy-code compliance certification — advisory, not a permit tool.
