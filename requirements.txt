@@ -4,8 +4,16 @@ python-multipart
 networkx
 shapely
 opencv-python-headless
-# Perception (add as you implement app/cv/pipeline.py)
-# ultralytics        # YOLOv10-seg
+
+# Perception — pretrained floorplan segmenter (app/cv/segmenter.py).
+# Install torch/torchvision from the CPU index to avoid the ~2.5GB CUDA wheels:
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+torch
+torchvision
+segmentation-models-pytorch
+safetensors
+pyyaml
+# OCR for room labels (app/cv/ocr.py) — not yet implemented
 # paddleocr
 # paddlepaddle
 
