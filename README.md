@@ -87,7 +87,109 @@ Real-world units are recovered via a fallback chain:
 
 ## Status
 
-Early-stage / architecture design. Contributions and issue reports welcome.
+The reasoning core (SKG geometry) and the 3D/WebXR pipeline are built and verified; the
+raster-perception and query layers are still being wired up. Contributions and issue reports
+welcome.
+
+### What works today
+- **SKG geometry engine** (`app/skg/engine.py`) — `add_room`, `compute_area`, `find_path`,
+  `check_egress` over NetworkX + Shapely. The deterministic math core.
+- **DXF ingestion** (`app/parsers/dxf_parser.py`) — parses walls/rooms/bounds/units into a
+  `NormalizedFloorplan`. Verified on a real blueprint (257 walls extracted).
+- **3D / WebXR pipeline** — `app/mesh/builder.py` extrudes a floorplan to a GLB;
+  `POST /api/mesh/to-glb` + `GET /api/mesh/sample/glb` serve it; `app/static/viewer.html`
+  renders it with orbit (desktop) and tap-to-teleport (VR). Verified end-to-end with both the
+  sample and a real DXF.
+- **Perception (CPU-only)** — `app/cv/segmenter.py` runs a CubiCasa5K-trained
+  ResNet34-UNet (MIT, `Yytsi/floorplan-to-3d-walls`) for walls/doors/windows/floor with no
+  GPU (~7 s/image on CPU after a one-time ~44 s model load).
+- **`/docs`** — Swagger UI served from local assets, so it renders on networks that block CDNs.
+
+### Known gaps / risks
+- **Rooms are empty on real files.** The DXF parser infers rooms from wall loops, but test
+  files with no room-boundary layer yield 0 rooms. Fix is Phase 3 (polygonize the wall
+  network + OCR labels) in `WORKPLAN.md`.
+- **Scale is uncalibrated.** One test DXF parses to a ~1 m footprint — units/scale are wrong
+  for some inputs. Fix is Phase 2 (manual two-point calibration + a safe default).
+- **Query layer is a stub.** `POST /api/query/` returns 501 (translator + SKG dispatch not
+  wired yet).
+- **Model drift.** The pretrained segmenter was trained on Nordic residential CAD; US-style
+  scans misread (door count high, wall count low). Tune thresholds or fine-tune (Phase 7).
+- **CPU-only throughput.** Segmentation ~7 s/image — fine one-at-a-time, not for batch.
+
+### Measured environment
+Python 3.12.10, Windows, Intel Iris Xe (no CUDA); torch 2.14.1+cpu, torchvision 0.29.1+cpu,
+segmentation-models-pytorch 0.5.0.
+
+## Running on your local network
+
+No deployment needed — this runs on one machine; other devices (phone for WebXR, laptop for
+the HUD) connect over Wi-Fi.
+
+```bash
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+`--host 0.0.0.0` is what makes it reachable from other devices on the LAN — `127.0.0.1`
+would only work on the host machine. Find your LAN IP with `ipconfig` (Windows) or
+`ifconfig` (macOS/Linux); look for `192.168.x.x`.
+
+- Host machine: `http://localhost:8000`
+- Other devices: `http://<your-local-ip>:8000`
+- API docs: `http://<your-local-ip>:8000/docs`
+- 3D viewer: `http://localhost:8000/static/viewer.html`
+
+The viewer loads a GLB automatically — the built-in sample by default, or your own via
+`viewer.html?src=<url>` (upload a DXF → `POST /api/mesh/to-glb` → pass the returned `url`).
+Desktop shows orbit + zoom; in a headset press **Enter VR**, point at the floor, and pull the
+trigger to teleport.
+
+### HTTPS is required for WebXR on phones (not optional)
+
+`navigator.xr` is **undefined on insecure origins**, so a phone hitting
+`http://192.168.x.x:8000` silently falls back to desktop-only. This is the most common
+demo-day failure — fix it **before** demo day. `localhost` counts as secure, so desktop VR
+works over `http://localhost:8000` with no cert. For a phone you need a real secure context:
+
+```bash
+# 1. Install mkcert (once) and create a locally-trusted cert for your machine:
+choco install mkcert          # or: winget install mkcert   (Windows)
+mkcert -install
+mkcert 192.168.x.x localhost  # your actual LAN IP + localhost
+
+# 2. Run uvicorn over TLS:
+uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+  --ssl-certfile cert.pem --ssl-keyfile key.pem
+```
+
+The phone must trust the cert — AirDrop `rootCA.pem` to an iOS device and enable it under
+Settings → General → About → Certificate Trust Settings. If that's too fiddly, a tunnel
+(`cloudflared tunnel --url http://localhost:8000` or `ngrok http 8000`) gives a public HTTPS
+URL but needs internet; prefer `mkcert` on a local-only network.
+
+### Demo notes
+- All presenting devices must be on the **same Wi-Fi** — this won't work across networks or
+  on mobile data. Some corporate/campus/guest networks block device-to-device traffic; a
+  phone hotspot or home router is most reliable.
+- The 3D viewer pulls Three.js from the jsDelivr CDN. If the demo network blocks external
+  CDNs (the same reason Swagger UI is vendored locally), download `three.module.js`,
+  `GLTFLoader.js`, `OrbitControls.js`, and `VRButton.js` into `app/static/vendor/three/` and
+  point the import map in `viewer.html` at them.
+
+### Repo gotcha: stale `__pycache__` after branch switches
+We were once bitten by a "missing" parser that wasn't — after switching branches, git removed
+the `.py` source but a leftover `__pycache__/*.pyc` made it look present, while the real code
+lived unmerged on another branch. If code seems to exist but won't import, check the actual
+branch has the `.py` file (`.pyc` files are gitignored; never rely on them).
+
+## API
+
+See [`API.md`](API.md) for the full REST reference — every endpoint with input/output
+formats, plus the planned (not-yet-implemented) routes. Interactive Swagger UI is at `/docs`.
 
 ## License
 

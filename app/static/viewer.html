@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- viewport-fit + these two meta tags are required for mobile WebXR -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Spatial Copilot — 3D / WebXR Viewer</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #14161a; color: #e7e7e7;
+                 font: 14px/1.4 system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    #hud { position: fixed; top: 12px; left: 12px; z-index: 10; max-width: 320px;
+           background: rgba(20,22,26,.82); border: 1px solid #2a2e36; border-radius: 8px;
+           padding: 12px 14px; backdrop-filter: blur(6px); }
+    #hud h1 { font-size: 15px; margin: 0 0 6px; }
+    #hud .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    #hud button { flex: 1 1 auto; padding: 8px 10px; border: 1px solid #3a3f4a; border-radius: 6px;
+                  background: #23262d; color: #e7e7e7; cursor: pointer; font: inherit; }
+    #hud button:hover { background: #2c3038; }
+    #hud button:disabled { opacity: .45; cursor: default; }
+    #meta { margin-top: 8px; font-size: 12px; color: #9aa0aa; white-space: pre-wrap; }
+    #warn { margin-top: 8px; font-size: 12px; color: #e0b341; white-space: pre-wrap; }
+    #err  { margin-top: 8px; font-size: 12px; color: #ff6b6b; white-space: pre-wrap; }
+    #help { position: fixed; bottom: 12px; left: 12px; z-index: 10; font-size: 12px; color: #7c828c; }
+  </style>
+  <!-- Three.js via import map: pin a version, load only what we need. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="hud">
+    <h1>Spatial Copilot</h1>
+    <div id="meta">Loading…</div>
+    <div id="warn"></div>
+    <div id="err"></div>
+    <div class="row">
+      <button id="btnSample">Load sample</button>
+      <button id="btnEnterVR" disabled>Enter VR</button>
+    </div>
+    <div class="row">
+      <button id="btnReset">Reset view</button>
+    </div>
+  </div>
+
+  <div id="help">Drag to orbit · scroll to zoom · in VR: point + trigger to teleport</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+    const app = document.getElementById('app');
+    const elMeta = document.getElementById('meta');
+    const elWarn = document.getElementById('warn');
+    const elErr  = document.getElementById('err');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x14161a);
+
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 500);
+    const DEFAULT_CAM = new THREE.Vector3(9, 7, 11);
+    camera.position.copy(DEFAULT_CAM);
+
+    // In VR the headset drives the camera; we move this rig instead of the camera.
+    const playerRig = new THREE.Group();
+    playerRig.add(camera);
+    scene.add(playerRig);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.xr.enabled = true;
+    app.appendChild(renderer.domElement);
+    app.appendChild(VRButton.createButton(renderer)); // styled button, bottom-center
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1, 0);
+
+    // Lighting: hemispheric ambient + one directional "sun" with shadows.
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x30323a, 0.9));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    sun.position.set(8, 14, 6);
+    sun.castShadow = true;
+    scene.add(sun);
+
+    // Ground grid + an invisible floor plane used as the teleport raycast target.
+    const grid = new THREE.GridHelper(60, 60, 0x3a3f4a, 0x23262d);
+    scene.add(grid);
+
+    const floorPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    floorPlane.rotation.x = -Math.PI / 2;
+    floorPlane.position.y = 0;
+    scene.add(floorPlane);
+
+    // Teleport reticle (a ring on the floor at the current aim point).
+    const reticle = new THREE.Mesh(
+      new THREE.RingGeometry(0.25, 0.35, 32),
+      new THREE.MeshBasicMaterial({ color: 0x4fd1c5, transparent: true, opacity: 0.9 })
+    );
+    reticle.rotation.x = -Math.PI / 2;
+    reticle.visible = false;
+    scene.add(reticle);
+
+    // ---- Model loading ------------------------------------------------------
+    const loader = new GLTFLoader();
+    let model = null;
+
+    function clearModel() {
+      if (model) { scene.remove(model); model = null; }
+    }
+
+    function loadGLB(url, label) {
+      elErr.textContent = '';
+      elMeta.textContent = `Loading ${label || 'model'}…`;
+      loader.load(
+        url,
+        (gltf) => {
+          clearModel();
+          model = gltf.scene;
+          scene.add(model);
+          frameModel(model);
+          const info = describe(model);
+          elMeta.textContent = `${label || 'Model'}\n${info}`;
+        },
+        undefined,
+        (e) => { elErr.textContent = `Failed to load model: ${e.message || e}`; }
+      );
+    }
+
+    function describe(root) {
+      let meshes = 0, tris = 0;
+      const box = new THREE.Box3();
+      root.traverse((o) => {
+        if (o.isMesh) {
+          meshes++;
+          const g = o.geometry;
+          if (g?.index) tris += g.index.count / 3;
+          else if (g?.attributes?.position) tris += g.attributes.position.count / 3;
+          box.expandByObject(o);
+        }
+      });
+      const size = box.getSize(new THREE.Vector3());
+      return `${meshes} mesh · ${Math.round(tris)} tris\n` +
+             `footprint ${size.x.toFixed(1)} × ${size.z.toFixed(1)} m · height ${size.y.toFixed(1)} m`;
+    }
+
+    // Frame the model: put its centre at origin and set orbit target to its middle.
+    const _box = new THREE.Box3();
+    const _size = new THREE.Vector3();
+    const _centre = new THREE.Vector3();
+    function frameModel(root) {
+      _box.setFromObject(root);
+      _box.getSize(_size);
+      _box.getCenter(_centre);
+      // Shift so footprint centre sits at (0,0); leave y as-is (floor already at 0).
+      root.position.x -= _centre.x;
+      root.position.z -= _centre.z;
+      controls.target.set(0, Math.max(1, _size.y * 0.4), 0);
+      const radius = Math.max(_size.x, _size.z, _size.y);
+      const dist = radius * 1.4 + 2;
+      camera.position.set(dist, dist * 0.8, dist);
+      controls.update();
+    }
+
+    // ---- WebXR: tap-to-teleport --------------------------------------------
+    const raycaster = new THREE.Raycaster();
+    const tempMatrix = new THREE.Matrix4();
+
+    function makeController(index) {
+      const controller = renderer.xr.getController(index);
+      // A thin line showing where the controller is pointing.
+      const grip = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]),
+        new THREE.LineBasicMaterial({ color: 0x4fd1c5 })
+      );
+      grip.scale.z = 5;
+      controller.add(grip);
+
+      controller.addEventListener('selectstart', onTeleport);
+      scene.add(controller);
+      return controller;
+    }
+
+    // Continuously aim the reticle while in VR.
+    function updateAim() {
+      if (!renderer.xr.isPresenting) { reticle.visible = false; return; }
+      const controller = renderer.xr.getController(0);
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+      const hit = raycaster.intersectObject(floorPlane, false)[0];
+      if (hit) { reticle.position.copy(hit.point); reticle.visible = true; }
+      else { reticle.visible = false; }
+    }
+
+    function onTeleport() {
+      const controller = renderer.xr.getController(0);
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+      const hit = raycaster.intersectObject(floorPlane, false)[0];
+      if (!hit) return;
+      // Keep the headset's local offset so the world slides under the user,
+      // rather than snapping their head to the floor point.
+      const camLocal = camera.position.clone();
+      playerRig.position.set(hit.point.x - camLocal.x, 0, hit.point.z - camLocal.z);
+    }
+
+    makeController(0);
+    makeController(1);
+
+    // Disable desktop orbit controls while immersed; re-enable on exit.
+    renderer.xr.addEventListener('sessionstart', () => { controls.enabled = false; });
+    renderer.xr.addEventListener('sessionend',   () => { controls.enabled = true;  });
+
+    // ---- Buttons ------------------------------------------------------------
+    document.getElementById('btnSample').onclick = () =>
+      loadGLB('/api/mesh/sample/glb', 'Sample floorplan');
+
+    const btnVR = document.getElementById('btnEnterVR');
+    // Only enable if the browser can actually start an immersive session.
+    if ('xr' in navigator) {
+      navigator.xr.isSessionSupported('immersive-vr').then((ok) => {
+        btnVR.disabled = !ok;
+        if (!ok) elWarn.textContent = 'WebXR not supported here — desktop orbit only. (Needs HTTPS or localhost.)';
+      }).catch(() => { elWarn.textContent = 'WebXR check failed — desktop orbit only.'; });
+    } else {
+      elWarn.textContent = 'No WebXR in this browser — desktop orbit only.';
+    }
+    btnVR.onclick = () => {
+      // The VRButton we appended already handles session start; click it for a11y.
+      document.getElementById('VRButton')?.click();
+    };
+
+    document.getElementById('btnReset').onclick = () => {
+      playerRig.position.set(0, 0, 0);
+      if (model) frameModel(model);
+      else { camera.position.copy(DEFAULT_CAM); controls.target.set(0, 1, 0); controls.update(); }
+    };
+
+    // ---- Boot: ?src= overrides, else fall back to the sample. ---------------
+    const params = new URLSearchParams(location.search);
+    const src = params.get('src');
+    if (src) loadGLB(src, params.get('name') || 'Model');
+    else loadGLB('/api/mesh/sample/glb', 'Sample floorplan');
+
+    // ---- Render loop --------------------------------------------------------
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      updateAim();
+      renderer.render(scene, camera);
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>

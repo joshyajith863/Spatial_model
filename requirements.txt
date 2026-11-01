@@ -20,3 +20,11 @@ pyyaml
 # Local LLM (add as you implement app/voice/translator.py)
 # llama-cpp-python   # or use an Ollama HTTP client instead, no extra dep needed
 ezdxf
+
+# 3D mesh / GLB export (app/mesh/builder.py) for the WebXR viewer.
+# manifold3d is optional — trimesh uses it for faster/robust booleans when present.
+trimesh
+manifold3d
+# extrude_polygon() needs a triangulation backend (mapbox_earcut or triangle).
+mapbox_earcut
+numpy

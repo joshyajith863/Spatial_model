@@ -14,9 +14,10 @@ from fastapi.openapi.docs import (
     get_swagger_ui_html,
     get_swagger_ui_oauth2_redirect_html,
 )
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import blueprints, query
+from app.api import blueprints, mesh, query
 
 app = FastAPI(
     title="Spatial Copilot",
@@ -38,6 +39,7 @@ app.add_middleware(
 
 app.include_router(blueprints.router, prefix="/api/blueprints", tags=["blueprints"])
 app.include_router(query.router, prefix="/api/query", tags=["query"])
+app.include_router(mesh.router, prefix="/api/mesh", tags=["mesh"])
 
 # Serves generated GLB files / HUD assets to the WebXR frontend.
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -65,3 +67,9 @@ async def swagger_ui_oauth2_redirect():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Land on the 3D/WebXR viewer; API docs are still at /docs."""
+    return RedirectResponse("/static/viewer.html")

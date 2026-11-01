@@ -3,6 +3,9 @@ __pycache__/
 venv/
 data/
 
+# Generated 3D models — rebuilt on demand from the source floorplan.
+app/static/glb/
+
 # Model weights — too large for git. Download with:
 #   python scripts/download_weights.py
 weights/
