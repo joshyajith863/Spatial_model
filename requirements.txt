@@ -13,9 +13,11 @@ torchvision
 segmentation-models-pytorch
 safetensors
 pyyaml
-# OCR for room labels (app/cv/ocr.py) — not yet implemented
-# paddleocr
-# paddlepaddle
+# OCR for room labels / dimension strings (app/cv/ocr.py).
+# PaddleOCR 3.x API; on Windows CPU we pass enable_mkldnn=False to dodge a
+# oneDNN PIR crash (see app/cv/ocr.py). paddleocr pulls in paddlepaddle.
+paddleocr
+paddlepaddle
 
 # Local LLM (add as you implement app/voice/translator.py)
 # llama-cpp-python   # or use an Ollama HTTP client instead, no extra dep needed

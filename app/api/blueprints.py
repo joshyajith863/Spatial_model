@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
+from app.cv.pipeline import read_text
 from app.models import NormalizedFloorplan
 from app.parsers.dxf_parser import parse_dxf
 
@@ -57,6 +58,39 @@ async def upload_blueprint(file: UploadFile = File(...)):
     }
     return BlueprintSummary(id=blueprint_id, filename=file.filename,
                             status="draft_ready", floorplan=floorplan)
+
+
+class OCRDetection(BaseModel):
+    text: str
+    confidence: float
+    box: list[list[float]]  # 4 (x, y) corners, original image pixels
+    center: list[float]
+
+
+class OCRResponse(BaseModel):
+    image_size: tuple[int, int]
+    detections: list[OCRDetection]
+
+
+@router.post("/ocr", response_model=OCRResponse)
+async def ocr_blueprint(file: UploadFile = File(...)):
+    """Stage 3 of the CV pipeline: OCR a raster blueprint for room labels and
+    dimension strings. Returns text + confidence + pixel-space boxes, so the
+    verification overlay can draw them straight onto the source image."""
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}:
+        raise HTTPException(415, "OCR expects a raster image (png/jpg/bmp/tif/webp).")
+
+    tmp = UPLOAD_DIR / f"ocr_{uuid.uuid4()}{suffix}"
+    tmp.write_bytes(await file.read())
+    try:
+        return read_text(str(tmp))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(422, f"OCR failed: {exc}")
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 @router.get("/{blueprint_id}", response_model=BlueprintSummary)

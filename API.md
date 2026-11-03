@@ -103,6 +103,32 @@ Lock the (human-verified) draft as ground truth. Queries are intended to run onl
 - **Output (200):** `{"id": "<blueprint_id>", "status": "confirmed"}`
 - **Errors:** **404** — unknown id.
 
+### `POST /api/blueprints/ocr`
+Stage 3 of the CV pipeline: OCR a **raster** blueprint for room labels and dimension strings.
+Returns text + confidence + pixel-space boxes so the verification overlay can draw them
+directly onto the source image. Uses PaddleOCR (lite), loaded once per process.
+
+- **Input:** `multipart/form-data`
+  - `file` (required) — a raster image (`.png .jpg .jpeg .bmp .tif .tiff .webp`).
+- **Output (200):**
+  ```json
+  {
+    "image_size": [600, 503],
+    "detections": [
+      { "text": "kitchen", "confidence": 1.0,
+        "box": [[112,64],[157,64],[157,113],[112,113]],
+        "center": [134.5, 88.5] }
+    ]
+  }
+  ```
+  `box` is 4 `(x, y)` corners; `center` is the box centroid. Both are in original
+  image pixel coordinates.
+- **Errors:**
+  - **415** — file is not a raster image (e.g. a `.dxf`).
+
+> **Note:** `POST /api/blueprints/upload` remains DXF-only for now; use this endpoint
+> directly for raster OCR until Phase 1 wires raster ingestion into upload.
+
 > **Planned (Phase 5):** a verification endpoint that accepts *edits* before confirm — e.g. `PATCH /api/blueprints/{id}` to rename/delete rooms, correct door links, and set `north_offset_deg` — plus an `openings` collection. The current `/confirm` only flips status.
 
 ---
