@@ -23,6 +23,14 @@ paddlepaddle
 # llama-cpp-python   # or use an Ollama HTTP client instead, no extra dep needed
 ezdxf
 
+# YOLO segmentation fine-tuning + dataset prep (Phase 7: scripts/*_yolo.py).
+# pyarrow/huggingface_hub read the CubiCasa5K Parquet from HuggingFace;
+# ultralytics pulls in the YOLO11n-seg / YOLOv8n-seg runtime.
+ultralytics
+pandas
+pyarrow
+huggingface_hub
+
 # 3D mesh / GLB export (app/mesh/builder.py) for the WebXR viewer.
 # manifold3d is optional — trimesh uses it for faster/robust booleans when present.
 trimesh

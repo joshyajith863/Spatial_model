@@ -136,11 +136,21 @@ point a person has checked.
 
 Only if Phases 1 and 4 aren't accurate enough on the test set.
 
-- [ ] Convert CubiCasa5K annotations to YOLO segmentation format.
-- [ ] Fine-tune **YOLOv8n-seg or YOLO11n-seg** (not YOLOv10 — verify in Ultralytics docs;
-      it may have no segmentation variant).
-- [ ] Evaluate against the heuristic pipeline on the test set; keep whichever is better
-      per element type.
+- [x] **Convert CubiCasa5K → YOLO segmentation format**
+      (`scripts/convert_cubicasa_yolo.py`). Pulls the `phungpx/cubicassa5k-coco` Parquet
+      from HuggingFace (4,228 train / 748 valid), maps the source's 8 classes onto our
+      `floor/wall/door/window` taxonomy (`--taxonomy segmenter`, default) or keeps the
+      raw 8 (`--taxonomy source`), writes `images/` + `labels/` + `data.yaml`. Verified
+      on a `--split valid --limit 6` smoke run.
+- [ ] **Fine-tune YOLO11n-seg / YOLOv8n-seg** — script built
+      (`scripts/train_yolo.py`, `yolo11n-seg.pt` default; *not YOLOv10*, which has no
+      segmentation variant in Ultralytics). `--dry-run` validates config; CPU-only box so
+      a real run is `--epochs` small + `--limit` slice first. **Not yet run.**
+- [ ] **Evaluate vs. the existing segmenter, keep the better one per element type**
+      (`scripts/eval_yolo.py`). Harness verified: per-class IoU + winner table, runs both
+      the UNet (`app/cv/segmenter.py`) and a YOLO checkpoint on the same val images.
+      Needs a trained YOLO `best.pt` to produce a real comparison (blocked on the step
+      above).
 
 ---
 

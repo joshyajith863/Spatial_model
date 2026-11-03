@@ -1,8 +1,12 @@
 """
-Smoke test for YOLOv10-seg on a raster blueprint (WORKPLAN Day 1-2, step 1).
+Smoke test for YOLO11n-seg on a raster blueprint (WORKPLAN Phase 7).
 
 Goal: prove the YOLO toolchain runs end-to-end on CPU -- model downloads,
 loads, and emits segmentation masks for an input image.
+
+Note: YOLOv10 was the original choice here but Ultralytics ships no YOLOv10
+segmentation variant (WORKPLAN Phase 7 says the same), so this uses
+yolo11n-seg instead.
 
 Honest caveat: pretrained COCO weights know nothing about walls/doors/rooms,
 so detections here are plumbing proof only. Real floorplan segmentation needs
@@ -25,12 +29,14 @@ def main() -> int:
         return 1
 
     print(f"Image: {image_path}")
-    print(f"Loading YOLOv10-seg (downloads weights on first run)...")
+    print("Loading YOLO11n-seg (downloads weights on first run)...")
 
     from ultralytics import YOLO
 
-    # yolov10s-seg.pt = small segmentation model; auto-downloads from GitHub.
-    model = YOLO("yolov10s-seg.pt")
+    # yolo11n-seg.pt = smallest YOLO11 segmentation model; auto-downloads from
+    # the Ultralytics release assets. (yolov10s-seg.pt does not exist — no
+    # YOLOv10 segmentation variant ships in Ultralytics.)
+    model = YOLO("yolo11n-seg.pt")
     print(f"Model loaded: {model.info()}")
 
     results = model.predict(source=str(image_path), imgsz=640, conf=0.25, verbose=False)

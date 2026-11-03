@@ -9,3 +9,8 @@ app/static/glb/
 # Model weights — too large for git. Download with:
 #   python scripts/download_weights.py
 weights/
+
+# Training runs / eval reports (YOLO) — rebuilt on demand.
+runs/
+yolo11n-seg.pt
+yolov8n-seg.pt
