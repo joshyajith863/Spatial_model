@@ -41,8 +41,9 @@ Nothing here has run outside the authoring sandbox — start here.
 
 - [ ] Install requirements locally and start the server.
 - [ ] Run one real DXF through `POST /api/mesh/to-glb` and open the result in `viewer.html`.
-- [ ] Fix whatever breaks (likely: DXF layer names, `trimesh`/`manifold3d` install, the
-      circular import in `app/api/query.py`).
+- [ ] Fix whatever breaks (likely: DXF layer names or the `trimesh`/`manifold3d` install).
+      The circular import in `app/api/query.py` is already fixed: `StructuredQuery` moved to
+      `app/models.py`, and `pytest` runs the suite in `tests/`.
 - [ ] Push to GitHub on a clean branch; trim the README to match what's actually built.
 
 **Done when:** a DXF upload shows a 3D model in the browser.

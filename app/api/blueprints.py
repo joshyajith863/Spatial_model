@@ -16,6 +16,8 @@ from pydantic import BaseModel
 from app.cv.pipeline import read_text
 from app.models import NormalizedFloorplan
 from app.parsers.dxf_parser import parse_dxf
+from app.skg import store
+from app.skg.from_floorplan import build_skg
 
 router = APIRouter()
 
@@ -111,9 +113,16 @@ def get_floorplan(blueprint_id: str):
 
 @router.post("/{blueprint_id}/confirm")
 def confirm_blueprint(blueprint_id: str):
-    """Lock the (possibly human-corrected) draft graph in as ground truth."""
+    """Lock the (possibly human-corrected) draft graph in as ground truth:
+    build the SKG from the parsed floorplan and register it in the graph
+    store so /api/query/ can answer against it."""
     bp = BLUEPRINTS.get(blueprint_id)
     if not bp:
         raise HTTPException(status_code=404, detail="Blueprint not found")
+    if not bp.get("floorplan"):
+        raise HTTPException(status_code=409, detail="Nothing to confirm: blueprint has no parsed floorplan.")
+    graph = build_skg(bp["floorplan"])
+    store.save(blueprint_id, graph)
+    bp["graph"] = graph
     bp["status"] = "confirmed"
     return {"id": blueprint_id, "status": "confirmed"}

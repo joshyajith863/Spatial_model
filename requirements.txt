@@ -1,11 +1,25 @@
+# After your first successful install, run `pip freeze > requirements.lock`
+# to pin exact versions for reproducible demos.
+
+# --- Core web app -----------------------------------------------------
 fastapi
 uvicorn[standard]
 python-multipart
+pydantic>=2
 networkx
-shapely
-opencv-python-headless
+shapely>=2
+numpy
+ezdxf                     # DXF ingestion (app/parsers/dxf_parser.py)
 
-# Perception — pretrained floorplan segmenter (app/cv/segmenter.py).
+# --- 3D mesh / GLB export (app/mesh/builder.py) -----------------------
+# manifold3d is optional - trimesh uses it for faster/robust booleans when present.
+trimesh
+manifold3d
+# extrude_polygon() needs a triangulation backend (mapbox_earcut or triangle).
+mapbox-earcut
+
+# --- Perception: raster CV + OCR (app/cv/*) ---------------------------
+opencv-python-headless
 # Install torch/torchvision from the CPU index to avoid the ~2.5GB CUDA wheels:
 #   pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 torch
@@ -13,17 +27,12 @@ torchvision
 segmentation-models-pytorch
 safetensors
 pyyaml
-# OCR for room labels / dimension strings (app/cv/ocr.py).
 # PaddleOCR 3.x API; on Windows CPU we pass enable_mkldnn=False to dodge a
 # oneDNN PIR crash (see app/cv/ocr.py). paddleocr pulls in paddlepaddle.
 paddleocr
 paddlepaddle
 
-# Local LLM (add as you implement app/voice/translator.py)
-# llama-cpp-python   # or use an Ollama HTTP client instead, no extra dep needed
-ezdxf
-
-# YOLO segmentation fine-tuning + dataset prep (Phase 7: scripts/*_yolo.py).
+# --- YOLO segmentation fine-tuning + dataset prep (scripts/*_yolo.py) --
 # pyarrow/huggingface_hub read the CubiCasa5K Parquet from HuggingFace;
 # ultralytics pulls in the YOLO11n-seg / YOLOv8n-seg runtime.
 ultralytics
@@ -31,10 +40,11 @@ pandas
 pyarrow
 huggingface_hub
 
-# 3D mesh / GLB export (app/mesh/builder.py) for the WebXR viewer.
-# manifold3d is optional — trimesh uses it for faster/robust booleans when present.
-trimesh
-manifold3d
-# extrude_polygon() needs a triangulation backend (mapbox_earcut or triangle).
-mapbox_earcut
-numpy
+# --- Tests (pytest) ---------------------------------------------------
+pytest
+httpx           # required by FastAPI's TestClient
+
+# --- Local LLM translator (opt-in) ------------------------------------
+# The rule-based fallback (app/voice/rule_based_translator.py) needs nothing.
+# For USE_LLM=1 run Ollama, or uncomment:
+# llama-cpp-python

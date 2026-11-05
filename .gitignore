@@ -1,16 +1,26 @@
 __pycache__/
 *.pyc
 venv/
+.venv/
 data/
 
-# Generated 3D models — rebuilt on demand from the source floorplan.
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local secrets
+.env
+.DS_Store
+
+# Generated 3D models - rebuilt on demand from the source floorplan.
 app/static/glb/
 
-# Model weights — too large for git. Download with:
+# Model weights - too large for git. Download with:
 #   python scripts/download_weights.py
 weights/
 
-# Training runs / eval reports (YOLO) — rebuilt on demand.
+# Training runs / eval reports (YOLO) - rebuilt on demand.
 runs/
 yolo11n-seg.pt
 yolov8n-seg.pt

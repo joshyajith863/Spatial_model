@@ -87,13 +87,17 @@ Real-world units are recovered via a fallback chain:
 
 ## Status
 
-The reasoning core (SKG geometry) and the 3D/WebXR pipeline are built and verified; the
-raster-perception and query layers are still being wired up. Contributions and issue reports
+The reasoning core (SKG geometry), the 3D/WebXR pipeline, and the query layer are built and
+verified; the raster-perception layer is still being wired up. Contributions and issue reports
 welcome.
 
 ### What works today
 - **SKG geometry engine** (`app/skg/engine.py`) — `add_room`, `compute_area`, `find_path`,
   `check_egress` over NetworkX + Shapely. The deterministic math core.
+- **Query layer** (`POST /api/query/`) — text → `app/voice/` translator (regex rules; Ollama
+  opt-in via `USE_LLM=1`) → deterministic dispatch in `app/skg/engine.py`. Graphs are built
+  from the parsed floorplan on `POST /api/blueprints/{id}/confirm` and held in
+  `app/skg/store.py`. Covered by `tests/`.
 - **DXF ingestion** (`app/parsers/dxf_parser.py`) — parses walls/rooms/bounds/units into a
   `NormalizedFloorplan`. Verified on a real blueprint (257 walls extracted).
 - **3D / WebXR pipeline** — `app/mesh/builder.py` extrudes a floorplan to a GLB;
@@ -111,8 +115,9 @@ welcome.
   network + OCR labels) in `WORKPLAN.md`.
 - **Scale is uncalibrated.** One test DXF parses to a ~1 m footprint — units/scale are wrong
   for some inputs. Fix is Phase 2 (manual two-point calibration + a safe default).
-- **Query layer is a stub.** `POST /api/query/` returns 501 (translator + SKG dispatch not
-  wired yet).
+- **Query translation is regex-only by default.** `POST /api/query/` works end-to-end, but
+  the Ollama path (`USE_LLM=1`) is untested on this machine and room matching has no fuzzy
+  fallback yet — Phase 6 in `WORKPLAN.md`.
 - **Model drift.** The pretrained segmenter was trained on Nordic residential CAD; US-style
   scans misread (door count high, wall count low). Tune thresholds or fine-tune (Phase 7).
 - **CPU-only throughput.** Segmentation ~7 s/image — fine one-at-a-time, not for batch.
@@ -131,6 +136,7 @@ python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
+pytest                          # run the test suite (tests/)
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 

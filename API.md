@@ -98,10 +98,12 @@ Fetch the parsed geometry for a blueprint.
 - **Errors:** **404** — unknown id, or no floorplan parsed.
 
 ### `POST /api/blueprints/{blueprint_id}/confirm`
-Lock the (human-verified) draft as ground truth. Queries are intended to run only against confirmed graphs.
+Lock the (human-verified) draft as ground truth: builds the SKG from the parsed floorplan
+(`app/skg/from_floorplan.py`) and registers it in the graph store (`app/skg/store.py`) so
+`POST /api/query/` can answer against it. Queries are intended to run only against confirmed graphs.
 - **Path param:** `blueprint_id`.
 - **Output (200):** `{"id": "<blueprint_id>", "status": "confirmed"}`
-- **Errors:** **404** — unknown id.
+- **Errors:** **404** — unknown id. **409** — blueprint has no parsed floorplan to build from.
 
 ### `POST /api/blueprints/ocr`
 Stage 3 of the CV pipeline: OCR a **raster** blueprint for room labels and dimension strings.
@@ -129,7 +131,7 @@ directly onto the source image. Uses PaddleOCR (lite), loaded once per process.
 > **Note:** `POST /api/blueprints/upload` remains DXF-only for now; use this endpoint
 > directly for raster OCR until Phase 1 wires raster ingestion into upload.
 
-> **Planned (Phase 5):** a verification endpoint that accepts *edits* before confirm — e.g. `PATCH /api/blueprints/{id}` to rename/delete rooms, correct door links, and set `north_offset_deg` — plus an `openings` collection. The current `/confirm` only flips status.
+> **Planned (Phase 5):** a verification endpoint that accepts *edits* before confirm — e.g. `PATCH /api/blueprints/{id}` to rename/delete rooms, correct door links, and set `north_offset_deg` — plus an `openings` collection. The current `/confirm` builds the graph from the floorplan as-is (adjacency is proximity-based, not door-verified).
 
 ---
 
@@ -195,10 +197,17 @@ Accept a natural-language (or transcribed voice) command, translate it into one 
   }
   ```
   `intent` ∈ `"find_path" | "compute_area" | "check_egress" | "unknown"`. Slot fields (`room_from`, `room_to`, `room`) are filled per intent; unused slots are `null`.
-  - `find_path` → `result` carries a `path` (ordered room ids) and hop count.
-  - `compute_area` → `result` carries `area_m2` for the target room.
-  - `check_egress` → `result` carries nearest-exit `path` and `hops`.
-- **Status:** **501** today — the translator is not yet wired (returns `intent: "unknown"`), so this endpoint responds `501 {"detail": "Query translation not implemented yet."}`. **Planned in Phase 6** to be backed by Ollama with a rule-based fallback.
+  - `find_path` → `result` carries a `path` (ordered room ids) and `hops` (edge count).
+  - `compute_area` → `result` carries the resolved `room` id and `area_m2`.
+  - `check_egress` → `result` carries nearest-exit `path`, `hops`, and `provisional_exits`
+    (true when no exits were explicitly marked, so leaf rooms stand in — treat the route as a hint).
+- **Errors:**
+  - **422** — the text didn't match any query template, the named room is unknown/ambiguous,
+    or there is no path between the two rooms.
+  - **404** — no graph stored for that `blueprint_id` (blueprint not confirmed yet).
+- **Status:** **Implemented.** The default translator is rule-based (`app/voice/rule_based_translator.py`);
+  set `USE_LLM=1` with a running Ollama to classify intents with a local model instead — the
+  rule parser remains the fallback, and neither ever computes geometry.
 
 ---
 
