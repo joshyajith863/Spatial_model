@@ -91,6 +91,9 @@ The reasoning core (SKG geometry), the 3D/WebXR pipeline, and the query layer ar
 verified; the raster-perception layer is still being wired up. Contributions and issue reports
 welcome.
 
+> **Full checklist:** [`STATUS.md`](STATUS.md) — what's done vs. what's left, phase by phase
+> (backed by the plan in [`WORKPLAN.md`](WORKPLAN.md)).
+
 ### What works today
 - **SKG geometry engine** (`app/skg/engine.py`) — `add_room`, `compute_area`, `find_path`,
   `check_egress` over NetworkX + Shapely. The deterministic math core.
