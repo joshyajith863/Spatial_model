@@ -49,6 +49,31 @@ DEFAULT_PROJECT = ROOT / "runs" / "segment"
 DEFAULT_NAME = "cubicasa"
 WEIGHTS_DIR = ROOT / "weights"
 
+
+def _portable_data_yaml(data_path: Path) -> Path:
+    """Rewrite `path:` in a dataset yaml to match this checkout.
+
+    data.yaml stores an absolute dataset root, so a set converted on one machine
+    (Windows) breaks on another (Colab/Linux). Ultralytics resolves relative
+    train/val entries against `path`, so point it at the yaml's own folder.
+    """
+    try:
+        import yaml
+
+        cfg = yaml.safe_load(data_path.read_text()) or {}
+        root = data_path.parent.resolve()
+        if not isinstance(cfg, dict) or "train" not in cfg:
+            return data_path
+        if str(cfg.get("path", "")) == str(root):
+            return data_path
+        cfg["path"] = str(root)
+        dest = data_path.parent / f"{data_path.stem}.runtime.yaml"
+        dest.write_text(yaml.safe_dump(cfg, sort_keys=False))
+        print(f"  data root: {root}  (rewritten to {dest.name})")
+        return dest
+    except Exception:
+        return data_path  # let Ultralytics report the real problem
+
 # --- Tiny terminal UI ------------------------------------------------------
 try:
     "█░".encode(sys.stdout.encoding or "ascii")
@@ -289,6 +314,8 @@ def train_model(
         print(f"  ! dataset config not found: {data_path}")
         print("    build it first:  python scripts/convert_cubicasa_yolo.py")
         return 1
+    if not resume:
+        data_path = _portable_data_yaml(data_path)
 
     device = _resolve_device(device)
     project_path = Path(project)

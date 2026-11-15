@@ -30,9 +30,38 @@ DEFAULT_PROJECT = "runs/segment"
 DEFAULT_NAME = "cubicasa"
 
 
+def portable_data_yaml(path: str | Path) -> str:
+    """Return a data.yaml whose `path:` root matches wherever the data lives now.
+
+    Ultralytics resolves relative `train:`/`val:` entries against `path:`, and the
+    converter writes an absolute root. That breaks the moment you copy the dataset
+    to another machine (Windows checkout -> Colab/Linux), so rewrite the root to
+    the yaml's own directory and hand Ultralytics the rewritten copy.
+    """
+    import yaml
+
+    src = Path(path)
+    try:
+        cfg = yaml.safe_load(src.read_text()) or {}
+    except Exception:
+        return str(src)  # let Ultralytics produce its own error message
+
+    root = src.parent.resolve()
+    if not isinstance(cfg, dict) or str(cfg.get("path", "")) == str(root):
+        return str(src)
+    if "train" not in cfg:
+        return str(src)
+
+    cfg["path"] = str(root)
+    dest = src.parent / f"{src.stem}.runtime.yaml"
+    dest.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    print(f"data root  {root}  (rewritten to {dest.name})")
+    return str(dest)
+
+
 def build_kwargs(args) -> dict:
     kw = dict(
-        data=args.data,
+        data=portable_data_yaml(args.data),
         model=args.model,
         epochs=args.epochs,
         imgsz=args.imgsz,
@@ -65,6 +94,12 @@ def make_subset_yaml(args) -> str:
     src = {}
     with open(args.data) as f:
         src = yaml.safe_load(f)
+
+    # Prefer the declared root when it is valid on *this* machine (the yaml may
+    # have been generated elsewhere), else fall back to the yaml's own folder.
+    declared = Path(str(src.get("path") or ""))
+    if declared.is_dir():
+        root = declared.resolve()
 
     limit = args.limit
     subset_root = root / f"subset_{limit}"
