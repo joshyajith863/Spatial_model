@@ -134,6 +134,27 @@ segmentation-models-pytorch 0.5.0.
 No deployment needed — this runs on one machine; other devices (phone for WebXR, laptop for
 the HUD) connect over Wi-Fi.
 
+### One-command loader
+
+`main.py` wraps the three common jobs (train / load / host) behind a menu or subcommands:
+
+```bash
+python main.py                                   # interactive menu
+python main.py train --epochs 5 --batch 8        # live per-epoch progress bars
+python main.py train --dry-run                   # validate config only
+python main.py train --resume runs/segment/cubicasa/weights/last.pt
+python main.py load segmenter --image plan.png   # load UNet, optional test inference
+python main.py load yolo --weights runs/segment/cubicasa/weights/best.pt
+python main.py serve --port 8000 --open          # API + WebXR viewer
+python main.py download                          # fetch pretrained UNet weights
+python main.py check                             # environment / dataset status
+```
+
+If `python` points at the system interpreter, use the venv explicitly:
+`.\venv\Scripts\python.exe main.py`.
+
+### Manual setup
+
 ```bash
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate

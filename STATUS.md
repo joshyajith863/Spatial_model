@@ -6,8 +6,13 @@ _Last updated: 2026-11-05. Source of truth for "what works right now" — keep i
 **Verify any claim here yourself:**
 
 ```bash
-pytest            # 27 tests
+pytest            # 32 tests
 uvicorn app.main:app --port 8000   # then open http://localhost:8000/docs
+```
+
+```bash
+python scripts/eval_raster.py --limit 100    # wall-extraction IoU table
+python main.py                               # interactive loader (train / load / serve)
 ```
 
 ---
@@ -71,23 +76,49 @@ uvicorn app.main:app --port 8000   # then open http://localhost:8000/docs
 ### Phase 0 — Verify the foundation
 - [ ] Run **one real DXF** through `POST /api/mesh/to-glb` and open it in `viewer.html`.
       (Code path is tested synthetically; a real file has not been pushed through in this session.)
-- [ ] Push to GitHub on a clean branch. **Current work is uncommitted** — see "Open work" below.
+- [x] Phase 1 work pushed to GitHub (`experiment` branch).
+- [ ] Still to do: run one **real DXF** through the viewer (Phase 1 covers raster; DXF is only
+      tested synthetically).
 
 ### Phase 1 — Raster walls with OpenCV
-- [ ] Ingest PNG/JPG directly + rasterise PDFs (PyMuPDF) at ~200 DPI.
-- [ ] Preprocess (grayscale → adaptive threshold → deskew).
-- [ ] Isolate walls (distance-transform thickness estimate, morphological opening).
-- [ ] Vectorize (contours → Shapely simplify → snap 0°/90° → merge collinear).
-- [ ] Collect the 8–10 plan **test set**; set up the **evaluation table**.
+- [x] **Raster/PDF ingestion** — PNG/JPG/BMP/TIF/WEBP + single-page PDF (PyMuPDF @ ~200 DPI),
+      wired into `POST /api/blueprints/upload` (optional `pixels_per_meter` query param).
+- [x] **Preprocess** — grayscale → Gaussian blur → global OTSU (adaptive fallback when the
+      split looks implausible, e.g. uneven scans), dark-border crop, speckle removal.
+      Deskew exists but is **opt-in and off by default**: measured worse (IoU 0.467 → 0.381).
+- [x] **Wall isolation** — distance transform, ridge half-thickness histogram,
+      thick/thin split at `0.5 × p85` (tuned; a plain Otsu split was ~4× worse),
+      thin-stroke removal and component filtering.
+- [x] **Vectorisation** — morphological skeleton → 8-connected polyline walk →
+      `approxPolyDP` simplify → `Wall` centreline segments in metres.
+- [x] **Rooms from raster** — enclosed background regions (not touching the border),
+      area-filtered (≥1 m²) so text counters/furniture loops don't become rooms.
+- [x] **Evaluation table** — `scripts/eval_raster.py` scores the extractor against
+      CubiCasa5K wall masks on the **full 748-image validation split**:
+
+      | metric | value |
+      |---|---|
+      | wall IoU (mean / median) | **0.430 / 0.393** |
+      | precision / recall | 0.588 / 0.611 |
+      | runtime | ~122 ms per plan (CPU) |
+      | best / worst image | 0.856 / 0.000 |
+
+      Recall sits near the annotation ceiling: ground-truth wall polygons are drawn
+      ~1.6× thicker than the printed lines, so only ~60% of GT wall area is ink at all.
+      Failures are dominated by very thin-line scans and heavy hatching (see
+      `runs/raster_eval/summary.json`).
 
 ### Phase 2 — Scale calibration
 - [ ] Two-point click calibration in the viewer → `pixels_per_meter`.
-- [ ] API accepts it; parser applies it **before** mesh + graph build.
-- [ ] Safe default so the demo never produces a 40 m bedroom.
+- [x] API accepts it (`?pixels_per_meter=`) and the parser applies it **before** mesh + graph build.
+- [x] Safe default: estimate from median wall thickness (assumed 0.20 m), clamped, and always
+      flagged in `floorplan.warnings` — so areas are never silently nonsense.
 
 ### Phase 3 — Rooms and real adjacency  ← blocks queries on real files
-- [ ] Shapely `polygonize` on the wall network → room faces (currently **rooms are empty** on
-      real files with no room layer).
+- [x] **First-cut rooms for raster** — enclosed background regions, area-filtered, `inferred=True`.
+      (DXF files with no room layer still yield 0 rooms — see Known gaps.)
+- [ ] Shapely `polygonize` + wall-network faces to replace the enclosed-region heuristic
+      (open doorways currently merge adjacent rooms).
 - [ ] PaddleOCR labels assigned by point-in-polygon; auto-name the unlabelled ones.
 - [ ] Replace proximity adjacency with **door-gap detection** (the current 0.3 m guess).
 
@@ -129,9 +160,10 @@ uvicorn app.main:app --port 8000   # then open http://localhost:8000/docs
 
 ## ⚠️ Known gaps / risks
 
-- [ ] **Rooms are empty on real files** — DXF parser infers rooms from wall loops; test files
-      without a room-boundary layer yield 0 rooms. Fix = Phase 3.
-- [ ] **Scale is uncalibrated** — one test DXF parsed to a ~1 m footprint. Fix = Phase 2.
+- [ ] **Rooms are empty on DXF files without a room layer** — the raster path now infers rooms
+      (enclosed regions), but DXF still relies on the walls→polygonize inference; Phase 3.
+- [ ] **Scale is uncalibrated on DXF** — one test DXF parsed to a ~1 m footprint. Raster plans
+      get a wall-thickness estimate + warning; Phase 2's two-click calibration is still missing.
 - [ ] **Adjacency is a guess** — rooms within 0.3 m are assumed connected; no door data.
 - [ ] **Egress exits are provisional** — leaf rooms stand in unless exits are explicitly marked;
       results are labelled `provisional_exits: true`.
@@ -139,20 +171,19 @@ uvicorn app.main:app --port 8000   # then open http://localhost:8000/docs
       US-style scans misread (door count high, wall count low).
 - [ ] **CPU-only throughput** — segmentation ~7 s/image; fine one-at-a-time, not for batch.
 - [ ] **No auth, open CORS, in-memory storage** — local-network demo only, never expose publicly.
-- [ ] **`fitz` (PyMuPDF) not installed in this venv** — vector-PDF ingestion needs
-      `pip install pymupdf`; raster/PDF ingest is Phase 1 anyway.
+- [x] **`fitz` (PyMuPDF) installed** — PDF pages rasterise at ~200 DPI in `app/cv/raster.py`;
+      added to `requirements.txt`.
+- [ ] **Raster wall clutter** — furniture strokes that pass the thickness test become spurious
+      wall segments (typically 150–600 per plan). Phase 3/5 filtering + human corrections.
 
 ---
 
 ## 📌 Open work (uncommitted in git)
 
-Consolidation of the nested `Spatial_model/Spatial_model` project into this repo — **all tests
-passing, not yet committed**:
+Nothing pending from this session. Phase 1 (raster ingest → walls → rooms → eval) is committed on
+`experiment`; `main.py` (interactive loader) and its README section are in the same commit.
 
-- Modified: `.gitignore`, `API.md`, `README.md`, `WORKPLAN.md`, `requirements.txt`,
-  `app/api/blueprints.py`, `app/api/query.py`, `app/models.py`, `app/skg/engine.py`,
-  `app/voice/translator.py`
-- Added: `pytest.ini`, `tests/` (27 tests), `app/skg/store.py`, `app/skg/from_floorplan.py`,
-  `app/voice/rule_based_translator.py`
-- Untracked leftovers: `Spatial_model/` (the old nested copy — delete once you're happy),
-  `normalized-floorplan.patch`
+Untracked leftovers still sitting in the working tree (deliberately not committed):
+
+- `Spatial_model/` — the old nested duplicate, safe to delete
+- `normalized-floorplan.patch` — superseded scratch patch

@@ -75,9 +75,11 @@ def test_rejects_bad_extension():
 
 
 def test_upload_traversal_filename_leaves_no_file(tmp_path):
-    # regression: client filename like "../../evil.png" must not escape data/uploads
+    # regression: client filename like "../../evil.png" must not escape data/uploads.
+    # Raster uploads are now valid, so the endpoint answers 422 (garbage bytes)
+    # instead of 415 — what matters is that no file lands outside data/uploads.
     from pathlib import Path
 
     r = client.post("/api/blueprints/upload", files={"file": ("../../evil.png", b"\x89PNG")})
-    assert r.status_code == 415
+    assert r.status_code in (415, 422)
     assert list(Path("data").glob("**/evil.png")) == []

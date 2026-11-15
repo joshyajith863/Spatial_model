@@ -10,10 +10,11 @@ Flow:
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from pydantic import BaseModel
 
 from app.cv.pipeline import read_text
+from app.cv.raster import parse_raster
 from app.models import NormalizedFloorplan
 from app.parsers.dxf_parser import parse_dxf
 from app.skg import store
@@ -23,6 +24,11 @@ router = APIRouter()
 
 UPLOAD_DIR = Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Raster plans (Phase 1): images and single-page PDFs go through the OpenCV
+# wall extractor instead of the DXF parser.
+RASTER_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".pdf"}
+SUPPORTED_EXTS = RASTER_EXTS | {".dxf"}
 
 # In-memory store for the demo. Fine for a local single-session presentation;
 # swap for sqlite if you need persistence across restarts.
@@ -37,19 +43,39 @@ class BlueprintSummary(BaseModel):
 
 
 @router.post("/upload", response_model=BlueprintSummary)
-async def upload_blueprint(file: UploadFile = File(...)):
+async def upload_blueprint(
+    file: UploadFile = File(...),
+    pixels_per_meter: float | None = Query(
+        None, gt=0,
+        description="Raster only: real-world scale. Omit to let the parser "
+                    "estimate it from wall thickness (uncalibrated).",
+    ),
+):
     blueprint_id = str(uuid.uuid4())
-    dest = UPLOAD_DIR / f"{blueprint_id}_{file.filename}"
+    # Never trust the client filename for paths: keep basename only so a name
+    # like "../../evil.png" cannot escape data/uploads.
+    safe_name = Path(file.filename or "upload").name
+    dest = UPLOAD_DIR / f"{blueprint_id}_{safe_name}"
     dest.write_bytes(await file.read())
 
-    suffix = Path(file.filename).suffix.lower()
-    if suffix != ".dxf":
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in SUPPORTED_EXTS:
         dest.unlink(missing_ok=True)
-        raise HTTPException(415, "Only .dxf is supported for now (raster/PDF not implemented).")
+        raise HTTPException(
+            415,
+            f"Unsupported file type {suffix or '(none)'}. "
+            f"Supported: {', '.join(sorted(SUPPORTED_EXTS))}",
+        )
+
     try:
-        floorplan = parse_dxf(str(dest))
+        if suffix == ".dxf":
+            floorplan = parse_dxf(str(dest))
+        else:
+            floorplan = parse_raster(str(dest), pixels_per_meter=pixels_per_meter)
     except Exception as exc:
-        raise HTTPException(422, f"Could not parse DXF: {exc}")
+        dest.unlink(missing_ok=True)
+        kind = "DXF" if suffix == ".dxf" else "image/PDF"
+        raise HTTPException(422, f"Could not parse {kind}: {exc}")
 
     BLUEPRINTS[blueprint_id] = {
         "filename": file.filename,

@@ -20,6 +20,8 @@ mapbox-earcut
 
 # --- Perception: raster CV + OCR (app/cv/*) ---------------------------
 opencv-python-headless
+# PDF rasterisation (app/cv/raster.py loads page 1 at ~200 DPI).
+pymupdf
 # Install torch/torchvision from the CPU index to avoid the ~2.5GB CUDA wheels:
 #   pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 torch
