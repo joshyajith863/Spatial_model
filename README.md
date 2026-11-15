@@ -164,7 +164,8 @@ Two notebooks drive the same code, so nothing can drift from `main.py`:
 
 `kaggle.ipynb` keeps the 1.5 GB dataset in `/kaggle/temp` (scratch, wiped per session) and only
 the checkpoints in `/kaggle/working`, so it fits Kaggle's 20 GB output budget. Turn
-*Settings → Internet* **on** before running it. `COLAB.md` has the Colab CLI equivalent.
+*Settings → Internet* **on** before running it — the switch stays greyed out until your Kaggle
+account has a verified phone number. `COLAB.md` has the Colab CLI equivalent.
 
 ### Manual setup
 
