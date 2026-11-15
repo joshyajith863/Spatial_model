@@ -153,6 +153,19 @@ python main.py check                             # environment / dataset status
 If `python` points at the system interpreter, use the venv explicitly:
 `.\venv\Scripts\python.exe main.py`.
 
+### Train without a GPU (notebooks)
+
+Two notebooks drive the same code, so nothing can drift from `main.py`:
+
+| Notebook | Where | What it does |
+|---|---|---|
+| `main.ipynb` | local Jupyter / Colab | same menu as `main.py`: check, train, load, serve |
+| `kaggle.ipynb` | Kaggle (GPU T4/P100) | clone repo → install deps → build CubiCasa5K dataset → train → evaluate → save weights |
+
+`kaggle.ipynb` keeps the 1.5 GB dataset in `/kaggle/temp` (scratch, wiped per session) and only
+the checkpoints in `/kaggle/working`, so it fits Kaggle's 20 GB output budget. Turn
+*Settings → Internet* **on** before running it. `COLAB.md` has the Colab CLI equivalent.
+
 ### Manual setup
 
 ```bash

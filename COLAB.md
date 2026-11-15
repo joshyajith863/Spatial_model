@@ -8,6 +8,9 @@ so a fresh Colab session only needs the small code clone.
 Open `notebooks/colab_train.ipynb` in Colab for the click-through version of
 these same steps.
 
+> Training on Kaggle instead? Use **`kaggle.ipynb`** at the repo root — same pipeline,
+> with the dataset in `/kaggle/temp` and weights in `/kaggle/working`.
+
 ---
 
 ## 1. Clone + install (2 minutes)

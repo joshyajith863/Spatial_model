@@ -22,5 +22,6 @@ weights/
 
 # Training runs / eval reports (YOLO) - rebuilt on demand.
 runs/
+artifacts/
 yolo11n-seg.pt
 yolov8n-seg.pt
