@@ -50,6 +50,52 @@ DEFAULT_NAME = "cubicasa"
 WEIGHTS_DIR = ROOT / "weights"
 
 
+def build_subset_dataset(data_yaml: str | Path, limit: int) -> Path:
+    """Write a `data.yaml` covering only the first `limit` images per split.
+
+    Ultralytics has no image cap, so smoke runs need a real subset on disk.
+    Returns the path of the subset yaml (under `<dataset>/subset_<limit>/`).
+    """
+    import yaml
+
+    src_path = Path(data_yaml)
+    src = yaml.safe_load(src_path.read_text()) or {}
+    parent = src_path.parent
+    declared = Path(str(src.get("path") or ""))
+    root = declared.resolve() if declared.is_dir() else parent.resolve()
+
+    subset_root = root / f"subset_{limit}"
+    made: dict[str, str] = {}
+    exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+    for split in ("train", "val"):
+        img_dir = root / str(src.get(split, f"images/{split}"))
+        if not img_dir.exists():
+            continue
+        keep = sorted(p for p in img_dir.iterdir() if p.suffix.lower() in exts)[:limit]
+        (subset_root / "images" / split).mkdir(parents=True, exist_ok=True)
+        (subset_root / "labels" / split).mkdir(parents=True, exist_ok=True)
+        label_dir = img_dir.parent.parent / "labels" / img_dir.name
+        for p in keep:
+            (subset_root / "images" / split / p.name).write_bytes(p.read_bytes())
+            lbl = label_dir / (p.stem + ".txt")
+            if lbl.exists():
+                (subset_root / "labels" / split / lbl.name).write_bytes(lbl.read_bytes())
+        made[split] = f"images/{split}"
+
+    cfg = {
+        "path": str(subset_root.resolve()),
+        "train": made.get("train"),
+        "val": made.get("val") or made.get("train"),
+        "names": src.get("names", {}),
+    }
+    subset_root.mkdir(parents=True, exist_ok=True)
+    dest = subset_root / "data.yaml"
+    dest.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    counts = ", ".join(f"{k}={limit}" for k in made)
+    print(f"  subset : {dest}  ({counts})")
+    return dest
+
+
 def _portable_data_yaml(data_path: Path) -> Path:
     """Rewrite `path:` in a dataset yaml to match this checkout.
 
