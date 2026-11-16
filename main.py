@@ -185,6 +185,49 @@ def _resolve_device(device: str) -> str:
     return "cpu"
 
 
+def cuda_device_error(device: str) -> str | None:
+    """Return a human explanation when a CUDA `device` can't work, else None.
+
+    Ultralytics only says "Invalid CUDA 'device=0' requested", which hides the
+    real cause. The usual one on Colab/Kaggle/GPU VMs is a CPU-only torch wheel
+    (`2.x.y+cpu`) replacing the CUDA build - `pip install -r requirements.txt`
+    does exactly that.
+    """
+    device = str(device).strip().lower()
+    if device in ("", "cpu"):
+        return None
+    try:
+        import torch
+    except ImportError:
+        return "  ! torch is not installed - pip install torch torchvision"
+
+    if torch.cuda.is_available():
+        return None
+
+    if getattr(torch.version, "cuda", None) is None:
+        reason = (
+            f"    torch {torch.__version__} is a CPU-only build - no CUDA support compiled in.\n"
+            "    That happens when `pip install -r requirements.txt` replaces the CUDA wheel."
+        )
+    else:
+        reason = (
+            f"    torch {torch.__version__} has CUDA {torch.version.cuda}, but no GPU is visible.\n"
+            "    Check `nvidia-smi`; on Colab: Runtime -> Change runtime type -> T4 GPU."
+        )
+
+    return (
+        f"  ! device '{device}' was requested but this interpreter has no usable GPU.\n"
+        f"{reason}\n"
+        "    Fix (Colab / Kaggle / GPU VM):\n"
+        "      pip uninstall -y torch torchvision\n"
+        "      pip install --force-reinstall torch torchvision\n"
+        "      # if that still gives +cpu, pin the CUDA build explicitly:\n"
+        "      #   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126\n"
+        "      # then restart the runtime - a new CUDA build only loads in a fresh kernel\n"
+        "    Or train on CPU now:  --device cpu"
+    )
+
+
 # ==========================================================================
 # 1. TRAIN
 # ==========================================================================
@@ -364,6 +407,10 @@ def train_model(
         data_path = _portable_data_yaml(data_path)
 
     device = _resolve_device(device)
+    error = cuda_device_error(device)
+    if error:
+        print(error)
+        return 1
     project_path = Path(project)
     if not project_path.is_absolute():
         project_path = ROOT / project_path

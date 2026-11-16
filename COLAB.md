@@ -103,6 +103,18 @@ python main.py load yolo --weights path/to/best.pt
 - **`dataset not found: data/yolo/data.yaml`** → run step 2 first.
 - **`CUDA out of memory`** → `--batch 8` (or `--imgsz 512`).
 - **Training on CPU by accident** → pass `--device 0`; the scripts default to CPU.
+- **`Invalid CUDA 'device=0' requested` / `torch 2.x.y+cpu`** → a CPU-only torch wheel
+  replaced Colab's CUDA build (nearly always `pip install -r requirements.txt`). Repair, then
+  **restart the runtime** — the new wheel only loads in a fresh kernel:
+
+  ```bash
+  !pip uninstall -y torch torchvision
+  !pip install --force-reinstall torch torchvision
+  import torch; print(torch.cuda.is_available())   # must be True
+  ```
+
+  `main.py train` and `scripts/train_yolo.py` now print this diagnosis instead of
+  Ultralytics' three-line traceback, and exit 1 without starting a run.
 - **Disconnected runtime** → rerun steps 1–2, then resume from Drive
   (`--resume .../last.pt`). The HF dataset download is cached within a session only.
 - **Raster Phase 1 eval needs no GPU**: `python scripts/eval_raster.py --limit 100`

@@ -22,12 +22,36 @@ Run:
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 DEFAULT_DATA = "data/yolo/data.yaml"
 DEFAULT_MODEL = "yolo11n-seg.pt"  # pretrained COCO weights, auto-downloaded
 DEFAULT_PROJECT = "runs/segment"
 DEFAULT_NAME = "cubicasa"
+
+
+def cuda_device_error(device: str) -> str | None:
+    """Explain an unusable CUDA device, reusing main.py's message when present."""
+    try:
+        root = str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from main import cuda_device_error as _shared
+
+        return _shared(device)
+    except Exception:
+        pass
+    try:
+        import torch
+    except ImportError:
+        return None
+    if str(device).strip().lower() in ("", "cpu") or torch.cuda.is_available():
+        return None
+    return (
+        f"device '{device}' requested but CUDA is unavailable (torch {torch.__version__}).\n"
+        "Use --device cpu, or reinstall a CUDA torch build and restart the kernel."
+    )
 
 
 def portable_data_yaml(path: str | Path) -> str:
@@ -168,6 +192,11 @@ def main() -> int:
     if not data_path.exists():
         print(f"dataset not found: {data_path}")
         print("run first:  python scripts/convert_cubicasa_yolo.py")
+        return 1
+
+    device_error = cuda_device_error(args.device)
+    if device_error:
+        print(device_error)
         return 1
 
     print(f"ultralytics {ultralytics.__version__}")
