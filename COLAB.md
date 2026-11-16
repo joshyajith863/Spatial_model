@@ -67,20 +67,51 @@ Useful flags:
 | `--resume runs/segment/cubicasa/weights/last.pt` | continue after a disconnect (loader only) |
 | `--no-amp` | disable mixed precision if you hit NaNs |
 
-## 4. Don't lose the weights (Colab wipes the VM)
+## 4. Checkpoints & resume (what actually matters)
 
-`runs/` is gitignored, so write straight into Drive or download the file:
+Ultralytics already checkpoints **every epoch** into the run directory:
+
+| file | role |
+|---|---|
+| `weights/last.pt` | exact resume point (weights + optimizer + EMA + scaler + epoch + args) |
+| `weights/best.pt` | best validation fitness so far — this is what you deploy |
+| `results.csv` | per-epoch metrics, so a resumed run continues the same curve |
+| `weights/epochN.pt` | only with `--save-period N` |
+
+So the problem is **not** saving state — it's *where*. `runs/` is gitignored and Colab's VM
+is disposable, so point the run directory at Drive:
 
 ```python
 from google.colab import drive; drive.mount('/content/drive')
 ```
 
 ```bash
-!python scripts/train_yolo.py --device 0 --epochs 50 --batch 16 \
-    --project /content/drive/MyDrive/spatial_runs
+!python main.py train --device 0 --epochs 50 --batch 16 --save-period 5 \
+    --project /content/drive/MyDrive/spatial_runs/segment --name cubicasa
 ```
 
-Weights land in `.../cubicasa/weights/best.pt`.
+Weights land in `.../spatial_runs/segment/cubicasa/weights/`. Nothing to copy afterwards.
+
+**Resume after a disconnect / 12 h timeout:**
+
+```bash
+!python main.py train --resume /content/drive/MyDrive/spatial_runs/segment/cubicasa/weights/last.pt --device 0
+```
+
+It continues in the *checkpoint's own* directory and restores epoch count, LR schedule,
+optimizer and augmentation state — no arguments from the old command needed. `main.py`
+prints the progress it found (`12/50 epochs done -> <dir>`) before starting.
+
+Two details worth knowing:
+
+- Only an **unfinished** run can be resumed. A finished run's checkpoint has `epoch = -1`;
+  `main.py` warns and Ultralytics starts a fresh run instead.
+- Don't hand-roll the generic `torch.save({'model_state_dict': ...})` recipe you find in blog
+  posts. Ultralytics checkpoints already carry more state than that, and replacing them
+  desynchronises the trainer (LR schedule, warmup, mosaic-disable-at-`close_mosaic`, AMP
+  scaler). Use `--resume`; it's the supported path.
+
+Drive writes are slower than local disk, but a checkpoint is ~6 MB per epoch — negligible.
 
 ## 5. Evaluate
 

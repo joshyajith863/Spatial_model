@@ -102,6 +102,7 @@ def build_kwargs(args) -> dict:
         amp=not args.no_amp,
         verbose=True,
         seed=args.seed,
+        save_period=args.save_period,
     )
     if args.limit:
         # Ultralytics has no built-in image cap, so subset the dataset up front.
@@ -178,6 +179,8 @@ def main() -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--exist-ok", action="store_true")
     p.add_argument("--no-amp", action="store_true", help="disable mixed precision")
+    p.add_argument("--save-period", type=int, default=-1, dest="save_period",
+                   help="also keep a checkpoint every N epochs (-1 = only last/best)")
     p.add_argument("--dry-run", action="store_true", help="build config + verify model/data, then exit")
     args = p.parse_args()
 

@@ -393,6 +393,7 @@ def train_model(
     exist_ok: bool = False,
     amp: bool = True,
     resume: str | Path | None = None,
+    save_period: int = -1,
     dry_run: bool = False,
 ) -> int:
     if not _has_module("ultralytics"):
@@ -419,8 +420,23 @@ def train_model(
 
     banner("Train - YOLO11 segmentation")
     print(f"  model   : {resume or base_model}")
-    print(f"  data    : {data_path if not resume else '(from checkpoint)'}")
-    print(f"  device  : {device}   epochs={epochs}  imgsz={imgsz}  batch={batch}")
+    checkpoint = _checkpoint_info(resume) if resume else None
+    if resume:
+        if checkpoint and checkpoint["epochs"]:
+            done = checkpoint["epoch"] + 1
+            where = Path(str(checkpoint["project"])) / str(checkpoint["name"])
+            print(f"  progress: {done}/{checkpoint['epochs']} epochs done -> {where}")
+            print("            (Ultralytics continues in the checkpoint's own run dir)")
+        if checkpoint and checkpoint["epoch"] < 0:
+            print("  ! this checkpoint is from a *finished* run (epoch -1),")
+            print("    so Ultralytics will start a fresh run instead of continuing.")
+    else:
+        print(f"  data    : {data_path}")
+    if resume:
+        print(f"  device  : {device}   (epochs/imgsz/batch come from the checkpoint)")
+    else:
+        print(f"  device  : {device}   epochs={epochs}  imgsz={imgsz}  batch={batch}")
+        print(f"  output  : {project_path / name}   save_period={save_period or 'off'}")
     if device == "cpu":
         print("  ! CPU-only: expect ~1h+/epoch on the full set. Use --epochs/--limit to start small.")
 
@@ -452,6 +468,7 @@ def train_model(
         verbose=False,   # our progress display replaces the default table
         plots=True,
         seed=int(seed),
+        save_period=int(save_period),
     )
 
     try:
@@ -460,8 +477,9 @@ def train_model(
         else:
             model.train(**kwargs)
     except KeyboardInterrupt:
-        print("\n\n  interrupted - check runs/ for last.pt, then resume with:")
-        print(f"    python main.py train --resume runs/segment/{name}/weights/last.pt")
+        last = project_path / name / "weights" / "last.pt"
+        print("\n\n  interrupted - the last completed epoch is already on disk, resume with:")
+        print(f"    python main.py train --resume {last}")
         return 130
 
     display.summary()
@@ -473,7 +491,26 @@ def train_model(
         if best.exists():
             print(f"\n  best weights: {best}", flush=True)
         print(f"  results csv : {Path(save_dir) / 'results.csv'}", flush=True)
+        print(f"  every epoch writes weights/last.pt there too - if the session dies,")
+        print(f"  resume with:  --resume {Path(save_dir) / 'weights' / 'last.pt'}", flush=True)
     return 0
+
+
+def _checkpoint_info(path: str | Path) -> dict | None:
+    """Read (epoch, epochs, project, name) out of an Ultralytics checkpoint."""
+    try:
+        import torch
+
+        ckpt = torch.load(str(path), map_location="cpu", weights_only=False)
+    except Exception:
+        return None
+    args = ckpt.get("train_args", {}) or {}
+    return {
+        "epoch": int(ckpt.get("epoch", -1)),
+        "epochs": int(args.get("epochs", 0) or 0),
+        "project": args.get("project"),
+        "name": args.get("name"),
+    }
 
 
 def interactive_train() -> int:
@@ -863,6 +900,8 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--exist-ok", action="store_true")
     train.add_argument("--no-amp", action="store_true")
     train.add_argument("--resume", default=None, help="path to last.pt to resume")
+    train.add_argument("--save-period", type=int, default=-1, dest="save_period",
+                       help="also keep a checkpoint every N epochs (-1 = only last/best)")
     train.add_argument("--dry-run", action="store_true")
 
     load = sub.add_parser("load", help="load and optionally run a model")
@@ -904,6 +943,7 @@ def main(argv: list[str] | None = None) -> int:
             exist_ok=args.exist_ok,
             amp=not args.no_amp,
             resume=args.resume,
+            save_period=args.save_period,
             dry_run=args.dry_run,
         )
     if args.command == "load":
